@@ -1,0 +1,148 @@
+
+
+#include "mbed.h"
+#include "arm_book_lib.h"
+#include <cstdio>
+
+
+
+DigitalIn gasDetector(D2);      
+DigitalIn aButton(D3);           
+DigitalIn bButton(D4);           
+DigitalIn overTempDetector(D5);  
+DigitalIn cButton(D6);           
+DigitalIn dButton(D7);           
+
+UnbufferedSerial uartUsb(USBTX, USBRX, 115200);
+
+
+
+bool on = true;
+bool off = false;
+bool gasalarmState = off;
+bool tempalarmState = off;
+bool monitoringMode = off;
+
+Timer monitoringTimer;
+
+
+
+void inputsInit(){
+    gasDetector.mode(PullDown);
+    overTempDetector.mode(PullDown);
+    aButton.mode(PullDown);
+    bButton.mode(PullDown);
+    cButton.mode(PullDown);
+    dButton.mode(PullDown);
+}
+
+void gasalarmactive(){
+    if(gasDetector == 1){
+        if(gasalarmState == off){
+            gasalarmState = on;
+            printf("WARNING: GAS DETECTED\n");
+        }
+        while(gasDetector == 1);
+    }
+}
+
+void gaslarmstate(){
+    if(aButton == 1){
+        if(gasalarmState == on){
+            printf("GAS ALARM ACTIVE\n");
+        } else {
+            printf("GAS ALARM CLEAR\n");
+        }
+        while(aButton == 1);
+    }
+}
+
+void tempCheck(){
+    if(bButton == 1){
+        if(tempalarmState == on){
+            printf("TEMP ALARM ACTIVE\n");
+        } else {
+            printf("TEMP ALARM CLEAR\n");
+        }
+        while(bButton == 1);
+    }
+}
+
+void tempalarmActive(){
+    if(overTempDetector == 1){
+        if(tempalarmState == off){
+            tempalarmState = on;
+            printf("WARNING: TEMPERATURE TOO HIGH\n");
+        }
+        while(overTempDetector == 1);
+    }
+}
+
+void alarmReset(){
+    if(cButton == 1){
+        gasalarmState = off;
+        tempalarmState = off;
+        printf("ALARMS RESET\n");
+        while(cButton == 1);
+    }
+}
+
+void toggleMonitoring(){
+    if(dButton == 1){
+        if(monitoringMode == on){
+            monitoringMode = off;
+            printf("MONITORING MODE DISABLED\n");
+            monitoringTimer.stop();
+        } else {
+            monitoringMode = on;
+            printf("MONITORING MODE ENABLED\n");
+            monitoringTimer.reset();
+            monitoringTimer.start();
+        }
+        while(dButton == 1);
+    }
+}
+
+void monitoringUpdate(){
+    if(monitoringMode == on){
+        if(monitoringTimer.read() >= 2.0){
+            printf("=== STATUS UPDATE ===\n");
+            
+            if(gasalarmState == on){
+                printf("Gas alarm state: ACTIVE\n");
+            } else {
+                printf("Gas alarm state: CLEAR\n");
+            }
+            
+            if(tempalarmState == on){
+                printf("Over-temperature alarm state: ACTIVE\n");
+            } else {
+                printf("Over-temperature alarm state: CLEAR\n");
+            }
+            
+            printf("====================\n");
+            monitoringTimer.reset();
+        }
+    }
+}
+
+
+
+int main(){
+    inputsInit(); 
+    
+    printf("\n=== ALARM SYSTEM STARTED ===\n\n");
+    
+    while(1){
+        gasalarmactive();
+        gaslarmstate();
+        tempCheck();
+        tempalarmActive();
+        alarmReset();
+        toggleMonitoring();
+        monitoringUpdate();
+        
+        ThisThread::sleep_for(50ms);
+    }
+}
+
