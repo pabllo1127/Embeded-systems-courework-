@@ -1,0 +1,179 @@
+#include "mbed.h"
+#include "arm_book_lib.h"
+
+#define TEMP_SCALING_FACTOR         330.0f
+#define TEMP_THRESHOLD_BASE         30.0f
+#define TEMP_THRESHOLD_MAX          80.0f
+#define GAS_CONFIRM_COUNT           6
+#define THRESHOLD_RANGE             100
+#define UPDATE_INTERVAL_MS          500
+#define BLINK_INTERVAL_MS           250
+#define LOOP_TICK_MS                10
+#define SERIAL_BAUD                 115200
+
+AnalogIn        temperatureSensor(A1);
+DigitalIn       gasSensor(PE_12);
+AnalogIn        potentiometer(A0);
+
+DigitalOut      buzzer(PE_10);
+DigitalOut      warningLed(LED1);
+
+UnbufferedSerial serial(USBTX, USBRX, SERIAL_BAUD);
+
+float   currentTemperature  = 0.0f;
+bool    gasDetected         = false;
+float   thresholdValue      = 50.0f;
+
+bool    temperatureWarning  = false;
+bool    gasWarning          = false;
+bool    systemAlarmActive   = false;
+
+int     updateCounter       = 0;
+int     blinkCounter        = 0;
+int     gasConfirmCounter   = 0;
+
+void    initializeSystem();
+void    readSensors();
+void    evaluateSensorData();
+void    updateOutputs();
+void    printStatus();
+void    serialPrint(const char* message);
+float   mapPotentiometerToThreshold(float potReading);
+float   readTemperatureInCelsius();
+
+int main()
+{
+    initializeSystem();
+
+    serialPrint("\r\n========================================\r\n");
+    serialPrint("    ENVIRONMENTAL MONITORING SYSTEM     \r\n");
+    serialPrint("========================================\r\n");
+    serialPrint("System initialised. Monitoring started.\r\n\r\n");
+
+    while (true) {
+        readSensors();
+        evaluateSensorData();
+        updateOutputs();
+
+        updateCounter += LOOP_TICK_MS;
+        if (updateCounter >= UPDATE_INTERVAL_MS) {
+            printStatus();
+            updateCounter = 0;
+        }
+
+        ThisThread::sleep_for(10ms);
+    }
+}
+
+void initializeSystem()
+{
+    gasSensor.mode(PullDown);
+
+    buzzer     = OFF;   // active HIGH - OFF = silent at startup
+    warningLed = OFF;
+
+    updateCounter     = 0;
+    blinkCounter      = 0;
+    gasConfirmCounter = 0;
+
+    warningLed = ON;
+    ThisThread::sleep_for(500ms);
+    warningLed = OFF;
+}
+
+void readSensors()
+{
+    currentTemperature = readTemperatureInCelsius();
+    gasDetected        = gasSensor.read();
+
+    float potReading = potentiometer.read();
+    thresholdValue   = mapPotentiometerToThreshold(potReading);
+}
+
+void evaluateSensorData()
+{
+    float tempThreshold = TEMP_THRESHOLD_BASE
+                        + (thresholdValue / THRESHOLD_RANGE)
+                        * (TEMP_THRESHOLD_MAX - TEMP_THRESHOLD_BASE);
+
+    temperatureWarning = (currentTemperature > tempThreshold);
+
+    if (!gasDetected) {
+        gasWarning        = false;
+        gasConfirmCounter = 0;
+    } else {
+        gasConfirmCounter++;
+        if (gasConfirmCounter >= GAS_CONFIRM_COUNT) {
+            gasWarning = true;
+        }
+    }
+
+    systemAlarmActive = temperatureWarning || gasWarning;
+}
+
+void updateOutputs()
+{
+    if (systemAlarmActive) {
+        buzzer = ON;    // active HIGH - ON fires buzzer
+
+        blinkCounter += LOOP_TICK_MS;
+        if (blinkCounter >= BLINK_INTERVAL_MS) {
+            warningLed   = !warningLed;
+            blinkCounter = 0;
+        }
+    } else {
+        buzzer       = OFF;  // active HIGH - OFF silences buzzer
+        warningLed   = OFF;
+        blinkCounter = 0;
+    }
+}
+
+void printStatus()
+{
+    char buffer[200];
+
+    serialPrint("----------------------------------------\r\n");
+
+    sprintf(buffer, "Threshold Setting : %.1f / 100\r\n", thresholdValue);
+    serialPrint(buffer);
+
+    sprintf(buffer, "Temperature       : %.2f C\r\n", currentTemperature);
+    serialPrint(buffer);
+
+    sprintf(buffer, "Gas Sensor        : %s\r\n", gasDetected ? "DETECTED" : "Normal");
+    serialPrint(buffer);
+
+    if (systemAlarmActive) {
+        serialPrint(">>> ALARM ACTIVE <<<\r\n");
+        serialPrint("Buzzer            : ON\r\n");
+
+        if (temperatureWarning && gasWarning) {
+            serialPrint("Cause             : Temperature + Gas\r\n");
+        } else if (temperatureWarning) {
+            serialPrint("Cause             : Temperature\r\n");
+        } else {
+            serialPrint("Cause             : Gas\r\n");
+        }
+    } else {
+        serialPrint("Status            : System Normal\r\n");
+        serialPrint("Buzzer            : OFF\r\n");
+    }
+
+    serialPrint("----------------------------------------\r\n\r\n");
+}
+
+float mapPotentiometerToThreshold(float potReading)
+{
+    return potReading * (float)THRESHOLD_RANGE;
+}
+
+float readTemperatureInCelsius()
+{
+    float analogReading = temperatureSensor.read();
+    return analogReading * TEMP_SCALING_FACTOR;
+}
+
+void serialPrint(const char* message)
+{
+    serial.write(message, strlen(message));
+}
