@@ -1,0 +1,70 @@
+#include "mbed.h"
+
+DigitalOut led1(LED1);
+DigitalOut led2(LED2);
+DigitalOut led3(LED3);
+
+// Task 3 - ping pong sequence
+void pingPong()
+{
+    // LED1 -> LED2 -> LED3 -> LED2 -> LED1 -> repeat
+    led1 = 1; ThisThread::sleep_for(200ms); led1 = 0; ThisThread::sleep_for(200ms);
+    led2 = 1; ThisThread::sleep_for(200ms); led2 = 0; ThisThread::sleep_for(200ms);
+    led3 = 1; ThisThread::sleep_for(200ms); led3 = 0; ThisThread::sleep_for(200ms);
+    led2 = 1; ThisThread::sleep_for(200ms); led2 = 0; ThisThread::sleep_for(200ms);
+}
+
+// Task 4 - blink all 3 LEDs 5 times then LED1 stays on
+void blinkThenHold()
+{
+    for (int i = 0; i < 5; i++) {
+        led1 = 1; led2 = 1; led3 = 1;
+        ThisThread::sleep_for(200ms);
+        led1 = 0; led2 = 0; led3 = 0;
+        ThisThread::sleep_for(200ms);
+    }
+    // phase 2 - LED1 stays on, LED2 and LED3 off
+    led1 = 1;
+    led2 = 0;
+    led3 = 0;
+}
+
+int main()
+{
+    // -------------------------------------------------------
+    // Task 1 - blink all three LEDs together every 500ms
+    // -------------------------------------------------------
+    while (true) {
+        led1 = !led1;
+        led2 = !led2;
+        led3 = !led3;
+        ThisThread::sleep_for(500ms);
+    }
+
+    // -------------------------------------------------------
+    // Task 2 - LED1 every 1s, LED2 twice as fast, LED3 half
+    // -------------------------------------------------------
+    int counter = 0;
+    while (true) {
+        counter += 500;
+        led2 = !led2;
+        if (counter % 1000 == 0) { led1 = !led1; }
+        if (counter % 2000 == 0) { led3 = !led3; }
+        ThisThread::sleep_for(500ms);
+    }
+
+    // -------------------------------------------------------
+    // Task 3 - ping pong sequence
+    // -------------------------------------------------------
+    while (true) {
+        pingPong();
+    }
+
+    // -------------------------------------------------------
+    // Task 4 - blink all 5 times then LED1 stays on (ACTIVE)
+    // -------------------------------------------------------
+    // while (true) {
+    //     blinkThenHold();
+    //     ThisThread::sleep_for(2000ms);
+    // }
+}
