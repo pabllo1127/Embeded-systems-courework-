@@ -1,0 +1,268 @@
+#include "mbed.h"
+#include "arm_book_lib.h"
+#include <cstdio>
+
+int code[4]={1,3,4,2};
+int pressed=0;
+int i=0;
+int inputbuffer[4];
+int wrongAttempts=0;
+int admin[4]={1,2,3,4};
+bool systemLocked=false;
+bool adminMode=false;
+
+DigitalIn b1(BUTTON1);
+DigitalIn resetbutton(D2);
+DigitalIn enterbutton(D3);
+DigitalIn button1(D4);
+DigitalIn button2(D5);
+DigitalIn button3(D6);
+DigitalIn button4(D7);
+DigitalOut led1(LED1);
+DigitalOut led2(LED2);
+DigitalOut led3(LED3);
+
+bool resetbuttonlast=false;
+bool enterbuttonlast=false;
+bool button1last=false;
+bool button2last=false;
+bool button3last=false;
+bool button4last=false;
+
+void warning(){
+    printf("3 wrong attempts, system shutdown for 30s. admin unlock needed\n");
+    systemLocked=true;
+    for (i=0;i<75;i++){
+        led3=1;
+        ThisThread::sleep_for(200ms);
+        led3=0;
+        ThisThread::sleep_for(200ms);
+    }  
+    printf("press reset button for admin overide\n");
+}
+
+void userinfo(){
+    printf("welcome, enter the 4 digit passcode and press the enter button to unlock system after entering code \n" );
+    ThisThread::sleep_for(2s);
+}
+
+void resetsystem(){
+    printf("admin code correct system reset\n");
+    wrongAttempts=0;
+    systemLocked=false;
+    pressed=0;
+    adminMode=false;
+    
+    for(i=0;i<4;i++){
+        inputbuffer[i]=0;
+    }
+    
+    for(i=0;i<5;i++){
+        led1=1;
+        led2=1;
+        ThisThread::sleep_for(150ms);
+        led1=0;
+        led2=0;
+        ThisThread::sleep_for(150ms);
+    }
+    printf("system unlocked\n");
+}
+
+void adminoveride(){
+    bool isMatch=true;
+    for(i=0;i<4;i++){
+        if(inputbuffer[i]!=admin[i]){
+            isMatch=false;
+            break;
+        }
+    }
+    
+    if(isMatch){
+        resetsystem();
+    }
+    else{
+        printf("admin code wrong\n");
+        for(i=0;i<3;i++){
+            led3=1;
+            ThisThread::sleep_for(300ms);
+            led3=0;
+            ThisThread::sleep_for(300ms);
+        }
+        pressed=0;
+        for(i=0;i<4;i++){
+            inputbuffer[i]=0;
+        }
+    }
+}
+
+void codecheck(){
+    if(adminMode){
+        adminoveride();
+        return;
+    }
+    
+    bool isMatch=true;
+    for(i=0;i<4;i++){
+        if(inputbuffer[i]!=code[i]){
+            isMatch=false;
+            break;
+        }
+    }
+    
+    if(isMatch){
+        printf("code is corect \n");
+        wrongAttempts=0;
+        pressed=0;
+        for(i=0;i<4;i++){
+            inputbuffer[i]=0;
+        }
+        for(i=0;i<3;i++){
+            led2=1;
+            ThisThread::sleep_for(200ms);
+            led2=0;
+            ThisThread::sleep_for(200ms);
+        }
+    }
+    else{
+        wrongAttempts++;
+        printf("Incorrect Code! Attempt %d of 3\n", wrongAttempts);
+        pressed=0;
+        for(i=0;i<4;i++){
+            inputbuffer[i]=0;
+        }
+        if(wrongAttempts>=3){
+            warning();
+        }
+    }
+}
+
+int main()
+{
+    b1.mode(PullDown);
+    resetbutton.mode(PullDown);
+    enterbutton.mode(PullDown);
+    button1.mode(PullDown);
+    button2.mode(PullDown);
+    button3.mode(PullDown);
+    button4.mode(PullDown);
+    led1 = OFF;
+    led2 = OFF;
+    led3 = OFF;
+    static BufferedSerial pc(USBTX, USBRX,115200);
+    
+    ThisThread::sleep_for(1s);
+    userinfo();
+
+    while (true) {
+        bool resetbuttonnow=resetbutton.read();
+        if(resetbuttonnow==1 && resetbuttonlast==0){
+            adminMode=!adminMode;
+            if(adminMode){
+                printf("admin mode on\n");
+                pressed=0;
+                for(i=0;i<4;i++){
+                    inputbuffer[i]=0;
+                }
+                for(i=0;i<3;i++){
+                    led1=1;
+                    led3=1;
+                    ThisThread::sleep_for(100ms);
+                    led1=0;
+                    led3=0;
+                    ThisThread::sleep_for(100ms);
+                }
+            }
+            else{
+                printf("admin mode off\n");
+                pressed=0;
+                for(i=0;i<4;i++){
+                    inputbuffer[i]=0;
+                }
+                led1=1;
+                ThisThread::sleep_for(500ms);
+                led1=0;
+            }
+            ThisThread::sleep_for(300ms);
+        }
+        resetbuttonlast=resetbuttonnow;
+        
+        if(systemLocked && !adminMode){
+            led3=1;
+            ThisThread::sleep_for(500ms);
+            led3=0;
+            ThisThread::sleep_for(500ms);
+            continue;
+        }
+        
+        bool button1now=button1.read();
+        if(button1now==1 && button1last==0){
+            if(pressed<4){
+                inputbuffer[pressed]=1;
+                pressed++;
+                printf("button 1 has been pressed [%d/4]\n",pressed);
+                led1=1;
+                ThisThread::sleep_for(100ms);
+                led1=0;
+            }
+            ThisThread::sleep_for(200ms);
+        }
+        button1last=button1now;
+        
+        bool button2now=button2.read();
+        if(button2now==1 && button2last==0){
+            if(pressed<4){
+                inputbuffer[pressed]=2;
+                pressed++;
+                printf("button2 has been pressed [%d/4]\n",pressed);
+                led1=1;
+                ThisThread::sleep_for(100ms);
+                led1=0;
+            }
+            ThisThread::sleep_for(200ms);
+        }
+        button2last=button2now;
+        
+        bool button3now=button3.read();
+        if(button3now==1 && button3last==0){
+            if(pressed<4){
+                inputbuffer[pressed]=3;
+                pressed++;
+                printf("button 3 has been pressed [%d/4]\n",pressed);
+                led1=1;
+                ThisThread::sleep_for(100ms);
+                led1=0;
+            }
+            ThisThread::sleep_for(200ms);
+        }
+        button3last=button3now;
+        
+        bool button4now=button4.read();
+        if(button4now==1 && button4last==0){
+            if(pressed<4){
+                inputbuffer[pressed]=4;
+                pressed++;
+                printf("button 4 has been pressed [%d/4]\n",pressed);
+                led1=1;
+                ThisThread::sleep_for(100ms);
+                led1=0;
+            }
+            ThisThread::sleep_for(200ms);
+        }
+        button4last=button4now;
+        
+        bool enterbuttonnow=enterbutton.read();
+        if(enterbuttonnow==1 && enterbuttonlast==0){
+            if(pressed==4){
+                printf("checking code\n");
+                codecheck();
+            }
+            else{
+                printf("enter all 4 digits [%d/4]\n",pressed);
+            }
+            ThisThread::sleep_for(300ms);
+        }
+        enterbuttonlast=enterbuttonnow;
+        
+        ThisThread::sleep_for(50ms);
+    }
+}
